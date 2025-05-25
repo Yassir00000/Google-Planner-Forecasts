@@ -247,29 +247,58 @@
         const copyButton = document.getElementById('copyTooltipButton'); // Riferimento al pulsante Copia
         let forecastChart;
         let fullChartDataPoints = [];
-        let currentTooltipRawData = null;
+        let currentTooltipRawData = null; // Kept for potential hover-only interactions if needed, but selection drives fixed tooltip
+        let selectedChartPointData = null;
 
         const defaultFixedTooltipContent = `<span class="placeholder">Passa il mouse sul grafico per vedere i dettagli o carica i dati...</span>`;
 
+        function updateFixedTooltipUI(pointData) {
+            const addDataButton = document.getElementById('addDataButton'); // Ensure we have the reference
+            const copyButton = document.getElementById('copyTooltipButton'); // Ensure we have the reference
+
+            if (!pointData) {
+                fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
+                if (copyButton) copyButton.disabled = true;
+                if (addDataButton) addDataButton.disabled = true; 
+                selectedChartPointData = null; // Safeguard: clear selected data if tooltip is cleared
+            } else {
+                let innerHtml = `
+                    <span class="label">Budget:</span><span class="value">${formatCurrency(pointData.budget)}</span>
+                    <span class="label">Conversioni:</span><span class="value">${formatNumber(pointData.conversions)}</span>
+                    <span class="label">Costo:</span><span class="value">${formatCurrency(pointData.cost, 'EUR', 2)}</span>
+                    <span class="label">Clic:</span><span class="value">${formatNumber(pointData.clicks)}</span>
+                    <span class="label">Impressioni:</span><span class="value">${formatNumber(pointData.impressions)}</span>
+                    <span class="label">CPA Medio:</span><span class="value">${formatCurrency(pointData.avgCpa, 'EUR', 2)}</span>
+                    <span class="label">CTR:</span><span class="value">${formatPercentage(pointData.ctr)}</span>
+                    <span class="label">CPC Medio:</span><span class="value">${formatCurrency(pointData.avgCpc, 'EUR', 2)}</span>
+                `;
+                fixedTooltipDisplayEl.innerHTML = innerHtml;
+                // Buttons are explicitly enabled by onClick.
+                // If pointData is present but it's only due to hover (not click), onClick handler won't run to enable them.
+                // If pointData is present due to a click, onClick handler will enable them.
+            }
+        }
+
         function handleAddData() {
-            if (!currentTooltipRawData) {
-                alert("Nessun dato disponibile da aggiungere. Passa il mouse sul grafico per selezionare i dati.");
+            if (!selectedChartPointData) { // Use selectedChartPointData
+                alert("Nessun dato selezionato da aggiungere. Clicca su un punto del grafico per selezionare i dati.");
+                const addDataButton = document.getElementById('addDataButton');
+                if (addDataButton) addDataButton.disabled = true; // Ensure disabled state
                 return;
             }
 
             const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
             const newRow = tableBody.insertRow();
 
-            // Order of cells based on the HTML thead: Budget, Conversioni, Costo, Clic, Impressioni, CPA Medio, CTR, CPC Medio, Azioni
             const cellsData = [
-                formatCurrency(currentTooltipRawData.budget),
-                formatNumber(currentTooltipRawData.conversions),
-                formatCurrency(currentTooltipRawData.cost, 'EUR', 2),
-                formatNumber(currentTooltipRawData.clicks),
-                formatNumber(currentTooltipRawData.impressions),
-                formatCurrency(currentTooltipRawData.avgCpa, 'EUR', 2),
-                formatPercentage(currentTooltipRawData.ctr),
-                formatCurrency(currentTooltipRawData.avgCpc, 'EUR', 2)
+                formatCurrency(selectedChartPointData.budget),
+                formatNumber(selectedChartPointData.conversions),
+                formatCurrency(selectedChartPointData.cost, 'EUR', 2),
+                formatNumber(selectedChartPointData.clicks),
+                formatNumber(selectedChartPointData.impressions),
+                formatCurrency(selectedChartPointData.avgCpa, 'EUR', 2),
+                formatPercentage(selectedChartPointData.ctr),
+                formatCurrency(selectedChartPointData.avgCpc, 'EUR', 2)
             ];
 
             cellsData.forEach(data => {
@@ -310,10 +339,15 @@
         ];
 
         async function loadSelectedJsonData() {
+            // Reset states when a new JSON is loaded
+            selectedChartPointData = null;
+            currentTooltipRawData = null;
+            updateFixedTooltipUI(null); // Clears fixed display and disables buttons
+
             const jsonDropdown = document.getElementById('jsonDropdown'); // Get dropdown inside function to ensure it's available
             const selectedFilePath = jsonDropdown.value;
             if (!selectedFilePath) {
-                displayJsonParseError("Nessun file JSON selezionato.");
+                displayJsonParseError("Nessun file JSON selezionato."); // This already handles button disabling via initializeChart
                 return;
             }
 
@@ -593,21 +627,27 @@
        }
         
         function copyTooltipData() {
-            if (!currentTooltipRawData || fixedTooltipDisplayEl.querySelector('.placeholder')) {
-                console.warn("Tentativo di copia con dati tooltip non validi o placeholder attivo.");
+            // Primary guard: only proceed if a point has been clicked and its data is in selectedChartPointData.
+            // The placeholder check is also good as an additional safeguard for UI state.
+            if (!selectedChartPointData || fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                console.warn("Tentativo di copia: Nessun dato selezionato tramite click o placeholder attivo.");
+                // Ensure button is disabled if this state is somehow reached
                 if (copyButton) copyButton.disabled = true;
                 return; 
             }
 
+            // Data source is now definitively selectedChartPointData
+            const rawData = selectedChartPointData;
+
             const dataToCopy = [
-                { label: "Budget", value: currentTooltipRawData.budget },
-                { label: "Conversioni", value: currentTooltipRawData.conversions },
-                { label: "Costo", value: currentTooltipRawData.cost },
-                { label: "Clic", value: currentTooltipRawData.clicks },
-                { label: "Impressioni", value: currentTooltipRawData.impressions },
-                { label: "CPA Medio", value: currentTooltipRawData.avgCpa },
-                { label: "CTR", value: currentTooltipRawData.ctr }, 
-                { label: "CPC Medio", value: currentTooltipRawData.avgCpc }
+                { label: "Budget", value: rawData.budget },
+                { label: "Conversioni", value: rawData.conversions },
+                { label: "Costo", value: rawData.cost },
+                { label: "Clic", value: rawData.clicks },
+                { label: "Impressioni", value: rawData.impressions },
+                { label: "CPA Medio", value: rawData.avgCpa },
+                { label: "CTR", value: rawData.ctr },
+                { label: "CPC Medio", value: rawData.avgCpc }
             ];
 
             let tableString = `"Metrica"	"Valore"\n`; 
@@ -627,7 +667,7 @@
                     copyButton.disabled = true;
                     setTimeout(() => {
                         copyButton.textContent = originalText;
-                        if (currentTooltipRawData && !fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                        if (selectedChartPointData && !fixedTooltipDisplayEl.querySelector('.placeholder')) {
                            copyButton.disabled = false;
                         }
                     }, 1500);
@@ -671,38 +711,54 @@
                         tooltip: {
                             enabled: false,
                             external: function(context) {
+                                // This external tooltip is now primarily for hover effects or direct Chart.js tooltip styling.
+                                // The fixed display (fixedChartTooltipDisplayEl) is updated by updateFixedTooltipUI,
+                                // which is called by onClick and potentially onHover if no point is selected.
                                 const tooltipModel = context.tooltip;
                                 if (tooltipModel.opacity === 0 || !tooltipModel.dataPoints || tooltipModel.dataPoints.length === 0) {
-                                    currentTooltipRawData = null; 
-                                    // fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent; // Handled by onHover
+                                    currentTooltipRawData = null; // Clear hover data
+                                    // If no point is actively selected by click, then onHover can clear the fixed display.
+                                    if (!selectedChartPointData) { 
+                                        updateFixedTooltipUI(null);
+                                    }
                                     return;
                                 }
                                 const activePointIndex = tooltipModel.dataPoints[0].dataIndex;
-                                const pointData = fullChartDataPoints[activePointIndex];
+                                currentTooltipRawData = fullChartDataPoints[activePointIndex]; // Store hover data
 
-                                if (!pointData) {
-                                    currentTooltipRawData = null; 
-                                    fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
-                                    if (copyButton) copyButton.disabled = true;
-                                    if (addDataButton) addDataButton.disabled = true;
-                                    return;
+                                // If no point is actively selected by click, update the fixed display on hover.
+                                if (!selectedChartPointData && currentTooltipRawData) {
+                                    updateFixedTooltipUI(currentTooltipRawData);
                                 }
-                                currentTooltipRawData = pointData; 
+                                // The actual display of fixedChartTooltipDisplayEl is now managed by updateFixedTooltipUI.
+                                // Button states (copy/add) are managed by onClick.
+                            }
+                        }
+                    },
+                    onClick: function(event, elements) {
+                        const addDataButton = document.getElementById('addDataButton'); // Ensure ref
+                        if (elements.length > 0) {
+                            const firstElement = elements[0];
+                            const activePointIndex = firstElement.index;
+                            const pointData = fullChartDataPoints[activePointIndex];
 
-                                let innerHtml = `
-                                    <span class="label">Budget:</span><span class="value">${formatCurrency(pointData.budget)}</span>
-                                    <span class="label">Conversioni:</span><span class="value">${formatNumber(pointData.conversions)}</span>
-                                    <span class="label">Costo:</span><span class="value">${formatCurrency(pointData.cost, 'EUR', 2)}</span>
-                                    <span class="label">Clic:</span><span class="value">${formatNumber(pointData.clicks)}</span>
-                                    <span class="label">Impressioni:</span><span class="value">${formatNumber(pointData.impressions)}</span>
-                                    <span class="label">CPA Medio:</span><span class="value">${formatCurrency(pointData.avgCpa, 'EUR', 2)}</span>
-                                    <span class="label">CTR:</span><span class="value">${formatPercentage(pointData.ctr)}</span>
-                                    <span class="label">CPC Medio:</span><span class="value">${formatCurrency(pointData.avgCpc, 'EUR', 2)}</span>
-                                `;
-                                fixedTooltipDisplayEl.innerHTML = innerHtml;
+                            if (pointData) {
+                                selectedChartPointData = pointData; 
+                                updateFixedTooltipUI(selectedChartPointData); 
+
                                 if (copyButton && copyButton.textContent !== 'Copiato!') copyButton.disabled = false;
                                 if (addDataButton) addDataButton.disabled = false;
+                            } else {
+                                selectedChartPointData = null;
+                                updateFixedTooltipUI(null); 
+                                if (copyButton) copyButton.disabled = true;
+                                if (addDataButton) addDataButton.disabled = true;
                             }
+                        } else {
+                            selectedChartPointData = null;
+                            updateFixedTooltipUI(null); 
+                            if (copyButton) copyButton.disabled = true;
+                            if (addDataButton) addDataButton.disabled = true;
                         }
                     },
                     scales: {
@@ -713,11 +769,22 @@
                         }
                     },
                     onHover: (event, chartElement) => {
-                        if (chartElement.length === 0 && forecastChart && forecastChart.tooltip && forecastChart.tooltip.getActiveElements().length === 0) {
-                             currentTooltipRawData = null; 
-                             fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
-                             if (copyButton) copyButton.disabled = true;
-                             if (addDataButton) addDataButton.disabled = true;
+                        // const addDataButton = document.getElementById('addDataButton'); // Already available globally or via updateFixedTooltipUI
+                        // const copyButton = document.getElementById('copyTooltipButton'); // Already available globally or via updateFixedTooltipUI
+
+                        if (chartElement.length === 0) { // Not hovering over a point
+                            currentTooltipRawData = null;
+                            if (!selectedChartPointData) { // If nothing is selected by click, clear the fixed display
+                                updateFixedTooltipUI(null); 
+                            }
+                        } else { // Hovering over a point
+                            const activePointIndex = chartElement[0].index;
+                            currentTooltipRawData = fullChartDataPoints[activePointIndex]; // Update hover data
+                            // If no point is actively selected by click, then onHover can update the fixed display.
+                            // updateFixedTooltipUI will ensure buttons remain disabled in this hover-only scenario.
+                            if (!selectedChartPointData && currentTooltipRawData) { 
+                                updateFixedTooltipUI(currentTooltipRawData);
+                            }
                         }
                     }
                 }
