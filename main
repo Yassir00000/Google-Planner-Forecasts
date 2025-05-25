@@ -134,12 +134,55 @@
             margin-top: 10px;
             white-space: pre-wrap;
         }
+
+        #jsonDropdown {
+            width: 100%; /* Or a specific max-width like other inputs */
+            padding: 10px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 0.9em;
+            box-sizing: border-box;
+            margin-bottom: 10px; /* If needed for spacing */
+            background-color: #fff;
+        }
+
+        #aggregatedDataTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px; /* Space between title and table */
+        }
+        #aggregatedDataTable th, 
+        #aggregatedDataTable td {
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.85em; /* Match fixedChartTooltip font-size */
+        }
+        #aggregatedDataTable th {
+            background-color: #f5f5f5; /* Match body background or a light header color */
+            font-weight: 500; /* Similar to other button/label weights */
+            color: #333;
+        }
+        #aggregatedDataTable tbody tr:hover {
+            background-color: #f9f9f9; /* Subtle hover for data rows */
+        }
+        #aggregatedDataTable tfoot td {
+            font-weight: bold;
+            background-color: #f0f0f0; /* Slightly different for footer */
+            border-top: 2px solid #dadce0;
+            color: #1a73e8; /* Theme color for summary text */
+        }
+        /* Style for the first cell in tfoot if it's a label */
+        #aggregatedDataTable tfoot td:first-child {
+            color: #333; /* Default text color for "Totale/Media Riepilogo:" */
+        }
     </style>
 </head>
 <body>
 
     <!-- Contenitore per il JSON -->
-    <script id="jsonDataContainer" type="application/json">
+    <script id="jsonDataContainer" type="application/json" style="display: none;">
 {
     "2": [
         "{\"4\":{\"3\":{\"1\":0,\"3\":{\"1\":[{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"AVERAGE_CPA_MICROS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}},{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"CONVERSIONS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}}]}},\"4\":\"2462873650389287394\"},\"6\":{\"1\":[{\"1\":[{\"1\":2,\"2\":2616715},{\"1\":3,\"2\":1747502},{\"1\":4,\"2\":2100089}],\"2\":\"cost_per_click\"},{\"1\":[{\"1\":2,\"2\":130300.453125},{\"1\":3,\"2\":50128.9375},{\"1\":4,\"2\":3626.253662109375}],\"2\":\"clicks\"},{\"1\":[{\"1\":2,\"2\":0.08532301336526871},{\"1\":3,\"2\":0.04880068823695183},{\"1\":4,\"2\":0.13692666590213776}],\"2\":\"click_through_rate\"},{\"1\":[{\"1\":2,\"2\":339482000000},{\"1\":3,\"2\":87205000000},{\"1\":4,\"2\":7690000000}],\"2\":\"cost_micros\"},{\"1\":[{\"1\":2,\"2\":3978536},{\"1\":3,\"2\":1786966},{\"1\":4,\"2\":56163}],\"2\":\"impressions\"}]},\"3\":\"IT\",\"5\":\"EUR\"}",
@@ -152,9 +195,8 @@
     </script> <!-- Fine contenitore JSON -->
 
     <div class="json-input-container">
-        <h3>Verifica o modifica il JSON qui (opzionale):</h3>
-        <textarea id="jsonInput" placeholder="Il JSON dal tag <script> verrà caricato qui. Puoi modificarlo e ri-cliccare il pulsante."></textarea>
-        <button onclick="updateUIFromPastedJSON()">Aggiorna Grafico con JSON</button>
+        <select id="jsonDropdown"></select>
+        <textarea id="jsonInput" placeholder="Il JSON dal tag <script> verrà caricato qui. Puoi modificarlo e ri-cliccare il pulsante." style="display:none;"></textarea>
         <div id="jsonParseError" class="error-message"></div>
     </div>
 
@@ -164,10 +206,37 @@
                 <span class="placeholder">Passa il mouse sul grafico per vedere i dettagli...</span>
             </div>
             <button id="copyTooltipButton" onclick="copyTooltipData()" title="Copia i dati del tooltip in formato tabella (CTRL+C)">Copia Dati</button>
+            <button id="addDataButton" type="button">Aggiungi</button>
         </div>
         <div class="chart-container">
             <canvas id="forecastChart"></canvas>
         </div>
+    </div>
+
+    <div id="aggregatedDataContainer" style="width: 100%; max-width: 1000px; margin-top: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); padding: 20px; box-sizing: border-box;">
+        <h3>Dati Aggiunti:</h3>
+        <table id="aggregatedDataTable" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="text-align: left; border-bottom: 1px solid #e0e0e0;">
+                    <th style="padding: 8px;">Budget</th>
+                    <th style="padding: 8px;">Conversioni</th>
+                    <th style="padding: 8px;">Costo</th>
+                    <th style="padding: 8px;">Clic</th>
+                    <th style="padding: 8px;">Impressioni</th>
+                    <th style="padding: 8px;">CPA Medio</th>
+                    <th style="padding: 8px;">CTR</th>
+                    <th style="padding: 8px;">CPC Medio</th>
+                    <th style="padding: 8px;">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data rows will be added here by JavaScript -->
+            </tbody>
+            <tfoot>
+                <!-- Summary row will be added here by JavaScript -->
+            </tfoot>
+        </table>
+        <div id="aggregatedTableError" class="error-message" style="margin-top: 10px;"></div>
     </div>
 
     <script>
@@ -178,8 +247,95 @@
         const copyButton = document.getElementById('copyTooltipButton'); // Riferimento al pulsante Copia
         let forecastChart;
         let fullChartDataPoints = [];
+        let currentTooltipRawData = null;
 
         const defaultFixedTooltipContent = `<span class="placeholder">Passa il mouse sul grafico per vedere i dettagli o carica i dati...</span>`;
+
+        function handleAddData() {
+            if (!currentTooltipRawData) {
+                alert("Nessun dato disponibile da aggiungere. Passa il mouse sul grafico per selezionare i dati.");
+                return;
+            }
+
+            const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
+            const newRow = tableBody.insertRow();
+
+            // Order of cells based on the HTML thead: Budget, Conversioni, Costo, Clic, Impressioni, CPA Medio, CTR, CPC Medio, Azioni
+            const cellsData = [
+                formatCurrency(currentTooltipRawData.budget),
+                formatNumber(currentTooltipRawData.conversions),
+                formatCurrency(currentTooltipRawData.cost, 'EUR', 2),
+                formatNumber(currentTooltipRawData.clicks),
+                formatNumber(currentTooltipRawData.impressions),
+                formatCurrency(currentTooltipRawData.avgCpa, 'EUR', 2),
+                formatPercentage(currentTooltipRawData.ctr),
+                formatCurrency(currentTooltipRawData.avgCpc, 'EUR', 2)
+            ];
+
+            cellsData.forEach(data => {
+                const cell = newRow.insertCell();
+                cell.textContent = data;
+                cell.style.padding = "8px"; // Match header style
+            });
+
+            // Add Delete Button
+            const deleteCell = newRow.insertCell();
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Elimina';
+            deleteButton.style.backgroundColor = '#dc3545'; // Red color
+            deleteButton.style.color = 'white';
+            deleteButton.style.border = 'none';
+            deleteButton.style.padding = '5px 10px';
+            deleteButton.style.borderRadius = '4px';
+            deleteButton.style.cursor = 'pointer';
+            deleteButton.onclick = function(event) { deleteDataRow(event); }; // Event listener for delete
+            deleteButton.onmouseover = function() { 
+                this.style.backgroundColor = '#c82333'; // Darker red on hover
+            };
+            deleteButton.onmouseout = function() { 
+                this.style.backgroundColor = '#dc3545';  // Original red
+            };
+            deleteCell.appendChild(deleteButton);
+            deleteCell.style.padding = "8px";
+
+            // Placeholder calls - these functions will be implemented in later steps
+            updateSummaryRow(); 
+            saveAggregatedData();
+        }
+
+        const availableJsonFiles = [
+            { name: "Automation 1", filePath: "Automation-1.json" },
+            { name: "Automation 2", filePath: "Automation-2.json" },
+            { name: "Automation 3", filePath: "Automation-3.json" }
+        ];
+
+        async function loadSelectedJsonData() {
+            const jsonDropdown = document.getElementById('jsonDropdown'); // Get dropdown inside function to ensure it's available
+            const selectedFilePath = jsonDropdown.value;
+            if (!selectedFilePath) {
+                displayJsonParseError("Nessun file JSON selezionato.");
+                return;
+            }
+
+            try {
+                const response = await fetch(selectedFilePath);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} while fetching ${selectedFilePath}`);
+                }
+                const jsonString = await response.text();
+                
+                if (jsonInputElement) {
+                    jsonInputElement.value = jsonString; 
+                    updateUIFromPastedJSON(); 
+                } else {
+                    console.error("jsonInputElement (textarea) non trovato.");
+                    displayJsonParseError("Errore interno: jsonInputElement non trovato.");
+                }
+            } catch (error) {
+                console.error('Errore durante il caricamento o parsing del JSON:', error);
+                displayJsonParseError(`Errore caricamento ${selectedFilePath}: ${error.message}`);
+            }
+        }
 
         function safeParseFloat(valueStr) {
             if (valueStr === "" || valueStr === null || valueStr === undefined) return 0;
@@ -211,41 +367,267 @@
             const roundedPercentage = Math.round(percentage * factor) / factor;
             return roundedPercentage.toLocaleString('it-IT', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + '%';
         }
+
+        function parseFormattedValue(formattedString) {
+            if (typeof formattedString !== 'string') {
+                return 0;
+            }
+            let cleanedString = formattedString.replace(/[€%\s]/g, ''); // Remove currency, percentage, spaces
+            cleanedString = cleanedString.replace(/\./g, ''); // Remove thousands separators (dots for it-IT)
+            cleanedString = cleanedString.replace(/,/g, '.');   // Replace decimal comma with period
+
+            const num = parseFloat(cleanedString);
+            
+            // If original string had '%', it was a percentage, so divide by 100
+            if (formattedString.includes('%')) {
+                return isNaN(num) ? 0 : num / 100;
+            }
+            return isNaN(num) ? 0 : num;
+        }
+
+        function deleteDataRow(event) {
+            const button = event.target;
+            const row = button.closest('tr'); // Get the closest parent <tr>
+            if (row) {
+                row.remove();
+                updateSummaryRow();
+                saveAggregatedData(); // Placeholder, will be implemented later
+            }
+        }
+
+        function updateSummaryRow() {
+            const table = document.getElementById('aggregatedDataTable');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            let tfoot = table.getElementsByTagName('tfoot')[0];
+
+            // Clear existing footer content
+            if (tfoot) {
+                tfoot.innerHTML = '';
+            } else {
+                // Create tfoot if it doesn't exist (should not happen with current HTML)
+                tfoot = document.createElement('tfoot');
+                table.appendChild(tfoot);
+            }
+
+            const rowCount = tbody.rows.length;
+            if (rowCount === 0) {
+                const summaryRow = tfoot.insertRow();
+                const cell = summaryRow.insertCell();
+                cell.colSpan = 9; // Number of columns
+                cell.textContent = 'Nessun dato aggiunto.';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '8px';
+                return;
+            }
+
+            // Initialize sums and counts for averages
+            // Indices: 0:Budget, 1:Conversioni, 2:Costo, 3:Clic, 4:Impressioni, 5:CPA Medio, 6:CTR, 7:CPC Medio
+            let sums = [0, 0, 0, 0, 0, 0, 0, 0]; // For Budget, Conv, Costo, Clic, Impr, CPA, CTR, CPC
+            let counts = [0, 0, 0, 0, 0, 0, 0, 0]; // For averaging CPA, CTR, CPC
+
+            for (let i = 0; i < rowCount; i++) {
+                const row = tbody.rows[i];
+                sums[0] += parseFormattedValue(row.cells[0].textContent); // Budget (Sum)
+                sums[1] += parseFormattedValue(row.cells[1].textContent); // Conversioni (Sum)
+                sums[2] += parseFormattedValue(row.cells[2].textContent); // Costo (Sum)
+                sums[3] += parseFormattedValue(row.cells[3].textContent); // Clic (Sum)
+                sums[4] += parseFormattedValue(row.cells[4].textContent); // Impressioni (Sum)
+                
+                const cpaValue = parseFormattedValue(row.cells[5].textContent); // CPA Medio
+                if (cpaValue > 0) { // Only include in average if it's a meaningful value
+                    sums[5] += cpaValue;
+                    counts[5]++;
+                }
+                
+                const ctrValue = parseFormattedValue(row.cells[6].textContent); // CTR
+                // CTR is a rate, average of rates is complex if impressions (denominator) varies.
+                // Simple average for now, or could do weighted average if clicks/impressions were also stored raw.
+                // For now, let's do a simple average of the displayed CTR values.
+                sums[6] += ctrValue; 
+                counts[6]++; // Count all rows for CTR average, even if 0%
+
+                const cpcValue = parseFormattedValue(row.cells[7].textContent); // CPC Medio
+                if (cpcValue > 0) { // Only include in average if meaningful
+                    sums[7] += cpcValue;
+                    counts[7]++;
+                }
+            }
+
+            const summaryRow = tfoot.insertRow();
+            summaryRow.style.fontWeight = 'bold';
+
+            // Cell 0: Label
+            let cell = summaryRow.insertCell();
+            cell.textContent = 'Totale/Media Riepilogo:';
+            cell.style.padding = '8px';
+
+            // Cell 1: Total Budget
+            cell = summaryRow.insertCell();
+            cell.textContent = formatCurrency(sums[0]);
+            cell.style.padding = '8px';
+
+            // Cell 2: Total Conversioni
+            cell = summaryRow.insertCell();
+            cell.textContent = formatNumber(sums[1]);
+            cell.style.padding = '8px';
+
+            // Cell 3: Total Costo
+            cell = summaryRow.insertCell();
+            cell.textContent = formatCurrency(sums[2], 'EUR', 2);
+            cell.style.padding = '8px';
+
+            // Cell 4: Total Clic
+            cell = summaryRow.insertCell();
+            cell.textContent = formatNumber(sums[3]);
+            cell.style.padding = '8px';
+
+            // Cell 5: Total Impressioni
+            cell = summaryRow.insertCell();
+            cell.textContent = formatNumber(sums[4]);
+            cell.style.padding = '8px';
+            
+            // Cell 6: Average CPA Medio
+            // Recalculate: Total Cost / Total Conversions
+            cell = summaryRow.insertCell();
+            cell.textContent = sums[1] > 0 ? formatCurrency(sums[2] / sums[1], 'EUR', 2) : 'N/D';
+            cell.style.padding = '8px';
+
+            // Cell 7: Average CTR (Recalculate from total clicks/impressions for accuracy if possible, else average of percentages)
+            // For now, recalculate: (Total Clicks / Total Impressions) if Total Impressions > 0
+            cell = summaryRow.insertCell();
+            cell.textContent = sums[4] > 0 ? formatPercentage(sums[3] / sums[4]) : 'N/D'; // CTR = Clicks / Impressions
+            cell.style.padding = '8px';
+            
+            // Cell 8: Average CPC Medio (Recalculate: Total Cost / Total Clicks)
+            cell = summaryRow.insertCell();
+            cell.textContent = sums[3] > 0 ? formatCurrency(sums[2] / sums[3], 'EUR', 2) : 'N/D'; // CPC = Cost / Clicks
+            cell.style.padding = '8px';
+
+            // Cell 9: Empty for Actions column
+            cell = summaryRow.insertCell();
+            cell.style.padding = '8px';
+        }
+
+        function saveAggregatedData() {
+            const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
+            const rows = tableBody.rows;
+            const dataToSave = [];
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const rowData = {
+                    // Parse values from table cells back to raw numbers for storage
+                    // Order: Budget, Conversioni, Costo, Clic, Impressioni, CPA Medio, CTR, CPC Medio
+                    budget: parseFormattedValue(row.cells[0].textContent),
+                    conversions: parseFormattedValue(row.cells[1].textContent),
+                    cost: parseFormattedValue(row.cells[2].textContent),
+                    clicks: parseFormattedValue(row.cells[3].textContent),
+                    impressions: parseFormattedValue(row.cells[4].textContent),
+                    avgCpa: parseFormattedValue(row.cells[5].textContent),
+                    ctr: parseFormattedValue(row.cells[6].textContent), // parseFormattedValue handles '%'
+                    avgCpc: parseFormattedValue(row.cells[7].textContent)
+                };
+                dataToSave.push(rowData);
+            }
+
+            localStorage.setItem('aggregatedTableData', JSON.stringify(dataToSave));
+        }
+
+        function _repopulateTableRow(rowData) {
+            const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
+            const newRow = tableBody.insertRow();
+
+            const cellsData = [
+                formatCurrency(rowData.budget),
+                formatNumber(rowData.conversions),
+                formatCurrency(rowData.cost, 'EUR', 2),
+                formatNumber(rowData.clicks),
+                formatNumber(rowData.impressions),
+                formatCurrency(rowData.avgCpa, 'EUR', 2),
+                formatPercentage(rowData.ctr),
+                formatCurrency(rowData.avgCpc, 'EUR', 2)
+            ];
+
+            cellsData.forEach(data => {
+                const cell = newRow.insertCell();
+                cell.textContent = data;
+                cell.style.padding = "8px";
+            });
+
+            const deleteCell = newRow.insertCell();
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Elimina';
+            deleteButton.style.backgroundColor = '#dc3545';
+            deleteButton.style.color = 'white';
+            deleteButton.style.border = 'none';
+            deleteButton.style.padding = '5px 10px';
+            deleteButton.style.borderRadius = '4px';
+            deleteButton.style.cursor = 'pointer';
+            deleteButton.onclick = function(event) { deleteDataRow(event); };
+            deleteButton.onmouseover = function() { 
+                this.style.backgroundColor = '#c82333'; // Darker red on hover
+            };
+            deleteButton.onmouseout = function() { 
+                this.style.backgroundColor = '#dc3545';  // Original red
+            };
+            deleteCell.appendChild(deleteButton);
+            deleteCell.style.padding = "8px";
+       }
+
+       function loadAggregatedData() {
+           const savedDataString = localStorage.getItem('aggregatedTableData');
+           if (savedDataString) {
+               try {
+                   const savedData = JSON.parse(savedDataString);
+                   if (Array.isArray(savedData)) {
+                       savedData.forEach(rowData => {
+                           _repopulateTableRow(rowData); // Use helper to create row from raw data
+                       });
+                       updateSummaryRow(); // Update summary after loading all rows
+                   }
+               } catch (error) {
+                   console.error("Errore durante il parsing dei dati da localStorage:", error);
+                   // Optionally clear corrupted data: localStorage.removeItem('aggregatedTableData');
+               }
+           }
+       }
         
         function copyTooltipData() {
-            const tooltipContentEl = document.getElementById('fixedChartTooltipDisplay');
-            const placeholder = tooltipContentEl.querySelector('.placeholder');
-
-            if (placeholder) {
-                // Questo caso non dovrebbe accadere se il pulsante è correttamente disabilitato
-                console.warn("Tentativo di copia quando il tooltip mostra un placeholder.");
+            if (!currentTooltipRawData || fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                console.warn("Tentativo di copia con dati tooltip non validi o placeholder attivo.");
+                if (copyButton) copyButton.disabled = true;
                 return; 
             }
 
-            const labels = tooltipContentEl.querySelectorAll('.label');
-            const values = tooltipContentEl.querySelectorAll('.value');
+            const dataToCopy = [
+                { label: "Budget", value: currentTooltipRawData.budget },
+                { label: "Conversioni", value: currentTooltipRawData.conversions },
+                { label: "Costo", value: currentTooltipRawData.cost },
+                { label: "Clic", value: currentTooltipRawData.clicks },
+                { label: "Impressioni", value: currentTooltipRawData.impressions },
+                { label: "CPA Medio", value: currentTooltipRawData.avgCpa },
+                { label: "CTR", value: currentTooltipRawData.ctr }, 
+                { label: "CPC Medio", value: currentTooltipRawData.avgCpc }
+            ];
 
-            if (labels.length === 0 || values.length === 0 || labels.length !== values.length) {
-                console.warn("Dati del tooltip non trovati o in formato non corretto per la copia.");
-                return; 
-            }
+            let tableString = `"Metrica"	"Valore"\n`; 
 
-            let tableString = "Metrica\tValore\n"; 
-            for (let i = 0; i < labels.length; i++) {
-                const labelText = labels[i].textContent.trim().replace(':', '').trim(); 
-                const valueText = values[i].textContent.trim();
-                tableString += `${labelText}\t${valueText}\n`;
-            }
+            dataToCopy.forEach(item => {
+                let valueStr = item.value;
+                if (typeof item.value === 'number') {
+                    valueStr = item.value.toString().replace(',', '.'); 
+                }
+                tableString += `"${item.label}"	"${valueStr}"\n`;
+            });
 
             navigator.clipboard.writeText(tableString.trim())
                 .then(() => {
                     const originalText = copyButton.textContent;
                     copyButton.textContent = 'Copiato!';
-                    copyButton.disabled = true; // Disabilita temporaneamente per feedback
+                    copyButton.disabled = true;
                     setTimeout(() => {
                         copyButton.textContent = originalText;
-                        // Ri-abilita solo se il tooltip ha ancora dati validi (il mouse potrebbe essersi spostato)
-                        if (!fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                        if (currentTooltipRawData && !fixedTooltipDisplayEl.querySelector('.placeholder')) {
                            copyButton.disabled = false;
                         }
                     }, 1500);
@@ -266,6 +648,9 @@
 
             fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
             if (copyButton) copyButton.disabled = true;
+            const addDataButton = document.getElementById('addDataButton'); // Get ref for state management
+            if (addDataButton) addDataButton.disabled = true;
+
 
             forecastChart = new Chart(ctx, {
                 type: 'line',
@@ -288,16 +673,21 @@
                             external: function(context) {
                                 const tooltipModel = context.tooltip;
                                 if (tooltipModel.opacity === 0 || !tooltipModel.dataPoints || tooltipModel.dataPoints.length === 0) {
+                                    currentTooltipRawData = null; 
+                                    // fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent; // Handled by onHover
                                     return;
                                 }
                                 const activePointIndex = tooltipModel.dataPoints[0].dataIndex;
                                 const pointData = fullChartDataPoints[activePointIndex];
 
                                 if (!pointData) {
+                                    currentTooltipRawData = null; 
                                     fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
                                     if (copyButton) copyButton.disabled = true;
+                                    if (addDataButton) addDataButton.disabled = true;
                                     return;
                                 }
+                                currentTooltipRawData = pointData; 
 
                                 let innerHtml = `
                                     <span class="label">Budget:</span><span class="value">${formatCurrency(pointData.budget)}</span>
@@ -311,6 +701,7 @@
                                 `;
                                 fixedTooltipDisplayEl.innerHTML = innerHtml;
                                 if (copyButton && copyButton.textContent !== 'Copiato!') copyButton.disabled = false;
+                                if (addDataButton) addDataButton.disabled = false;
                             }
                         }
                     },
@@ -323,8 +714,10 @@
                     },
                     onHover: (event, chartElement) => {
                         if (chartElement.length === 0 && forecastChart && forecastChart.tooltip && forecastChart.tooltip.getActiveElements().length === 0) {
+                             currentTooltipRawData = null; 
                              fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
                              if (copyButton) copyButton.disabled = true;
+                             if (addDataButton) addDataButton.disabled = true;
                         }
                     }
                 }
@@ -342,6 +735,8 @@
             );
             fixedTooltipDisplayEl.innerHTML = `<span class="placeholder">${message}</span>`;
             if (copyButton) copyButton.disabled = true;
+            const addDataButton = document.getElementById('addDataButton');
+            if (addDataButton) addDataButton.disabled = true;
         }
         
         function loadJsonFromTagToTextarea() {
@@ -449,13 +844,36 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (copyButton) copyButton.disabled = true; // Disabilita all'avvio
-            initializeChart( // Questa chiamata imposterà il tooltip e disabiliterà il pulsante
+            const jsonDropdown = document.getElementById('jsonDropdown');
+            const addDataButton = document.getElementById('addDataButton');
+
+            availableJsonFiles.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.filePath;
+                option.textContent = item.name;
+                jsonDropdown.appendChild(option);
+            });
+
+            jsonDropdown.addEventListener('change', loadSelectedJsonData);
+            if (addDataButton) {
+                addDataButton.disabled = true;
+                addDataButton.addEventListener('click', handleAddData);
+            }
+
+            if (copyButton) copyButton.disabled = true; 
+            initializeChart( 
                 [], [],
                 'Budget giornaliero medio (€)', 'Conversioni', 'Previsione Conversioni (Carica i dati)'
             );
-            loadJsonFromTagToTextarea();
-            updateUIFromPastedJSON(); 
+
+            if (availableJsonFiles.length > 0) {
+                jsonDropdown.value = availableJsonFiles[0].filePath; 
+                loadSelectedJsonData(); 
+            } else {
+                displayJsonParseError("Nessun file JSON di automazione configurato.");
+            }
+            
+            loadAggregatedData(); // Load saved table data after other initializations
         });
     </script>
 </body>
