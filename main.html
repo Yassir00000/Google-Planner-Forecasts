@@ -218,6 +218,7 @@
         <table id="aggregatedDataTable" style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="text-align: left; border-bottom: 1px solid #e0e0e0;">
+                    <th style="padding: 8px;">Origine</th> <!-- New header -->
                     <th style="padding: 8px;">Budget</th>
                     <th style="padding: 8px;">Conversioni</th>
                     <th style="padding: 8px;">Costo</th>
@@ -293,10 +294,15 @@
             }
             console.log('handleAddData: Proceeding to add data to table.');
 
+            const jsonDropdown = document.getElementById('jsonDropdown'); // Get dropdown
+            const sourceName = jsonDropdown.options[jsonDropdown.selectedIndex].text; // Get selected source name
+
             const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
             const newRow = tableBody.insertRow();
 
+            // Add sourceName as the first data item for the row
             const cellsData = [
+                sourceName, // New first data item
                 formatCurrency(selectedChartPointData.budget),
                 formatNumber(selectedChartPointData.conversions),
                 formatCurrency(selectedChartPointData.cost, 'EUR', 2),
@@ -455,7 +461,7 @@
             if (rowCount === 0) {
                 const summaryRow = tfoot.insertRow();
                 const cell = summaryRow.insertCell();
-                cell.colSpan = 9; // Number of columns
+                cell.colSpan = 10; // Adjusted for the new "Origine" column
                 cell.textContent = 'Nessun dato aggiunto.';
                 cell.style.textAlign = 'center';
                 cell.style.padding = '8px';
@@ -463,91 +469,74 @@
             }
 
             // Initialize sums and counts for averages
-            // Indices: 0:Budget, 1:Conversioni, 2:Costo, 3:Clic, 4:Impressioni, 5:CPA Medio, 6:CTR, 7:CPC Medio
-            let sums = [0, 0, 0, 0, 0, 0, 0, 0]; // For Budget, Conv, Costo, Clic, Impr, CPA, CTR, CPC
-            let counts = [0, 0, 0, 0, 0, 0, 0, 0]; // For averaging CPA, CTR, CPC
+            // Indices: 0:Budget, 1:Conversioni, 2:Costo, 3:Clic, 4:Impressioni
+            // We don't sum pre-calculated averages like CPA, CTR, CPC directly from rows.
+            // We calculate them based on the total sums of their components.
+            let sums = [0, 0, 0, 0, 0]; // Budget, Conversioni, Costo, Clic, Impressioni
 
             for (let i = 0; i < rowCount; i++) {
                 const row = tbody.rows[i];
-                sums[0] += parseFormattedValue(row.cells[0].textContent); // Budget (Sum)
-                sums[1] += parseFormattedValue(row.cells[1].textContent); // Conversioni (Sum)
-                sums[2] += parseFormattedValue(row.cells[2].textContent); // Costo (Sum)
-                sums[3] += parseFormattedValue(row.cells[3].textContent); // Clic (Sum)
-                sums[4] += parseFormattedValue(row.cells[4].textContent); // Impressioni (Sum)
-                
-                const cpaValue = parseFormattedValue(row.cells[5].textContent); // CPA Medio
-                if (cpaValue > 0) { // Only include in average if it's a meaningful value
-                    sums[5] += cpaValue;
-                    counts[5]++;
-                }
-                
-                const ctrValue = parseFormattedValue(row.cells[6].textContent); // CTR
-                // CTR is a rate, average of rates is complex if impressions (denominator) varies.
-                // Simple average for now, or could do weighted average if clicks/impressions were also stored raw.
-                // For now, let's do a simple average of the displayed CTR values.
-                sums[6] += ctrValue; 
-                counts[6]++; // Count all rows for CTR average, even if 0%
-
-                const cpcValue = parseFormattedValue(row.cells[7].textContent); // CPC Medio
-                if (cpcValue > 0) { // Only include in average if meaningful
-                    sums[7] += cpcValue;
-                    counts[7]++;
-                }
+                // Assuming "Origine" is at row.cells[0], data starts from row.cells[1]
+                sums[0] += parseFormattedValue(row.cells[1].textContent); // Budget
+                sums[1] += parseFormattedValue(row.cells[2].textContent); // Conversioni
+                sums[2] += parseFormattedValue(row.cells[3].textContent); // Costo
+                sums[3] += parseFormattedValue(row.cells[4].textContent); // Clic
+                sums[4] += parseFormattedValue(row.cells[5].textContent); // Impressioni
+                // CPA, CTR, CPC in row.cells[6,7,8] are not summed up directly for total average
             }
 
             const summaryRow = tfoot.insertRow();
             summaryRow.style.fontWeight = 'bold';
 
-            // Cell 0: Label
-            let cell = summaryRow.insertCell();
-            cell.textContent = 'Totale/Media Riepilogo:';
-            cell.style.padding = '8px';
+            // 1. Label "TOTALI / MEDIE:" in the "Origine" column slot
+            let summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = 'TOTALI / MEDIE:';
+            summaryCell.style.padding = '8px';
+            summaryCell.style.textAlign = 'left';
 
-            // Cell 1: Total Budget
-            cell = summaryRow.insertCell();
-            cell.textContent = formatCurrency(sums[0]);
-            cell.style.padding = '8px';
-
-            // Cell 2: Total Conversioni
-            cell = summaryRow.insertCell();
-            cell.textContent = formatNumber(sums[1]);
-            cell.style.padding = '8px';
-
-            // Cell 3: Total Costo
-            cell = summaryRow.insertCell();
-            cell.textContent = formatCurrency(sums[2], 'EUR', 2);
-            cell.style.padding = '8px';
-
-            // Cell 4: Total Clic
-            cell = summaryRow.insertCell();
-            cell.textContent = formatNumber(sums[3]);
-            cell.style.padding = '8px';
-
-            // Cell 5: Total Impressioni
-            cell = summaryRow.insertCell();
-            cell.textContent = formatNumber(sums[4]);
-            cell.style.padding = '8px';
+            // 2. Total Budget (sums[0])
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = formatCurrency(sums[0]);
+            summaryCell.style.padding = '8px';
             
-            // Cell 6: Average CPA Medio
-            // Recalculate: Total Cost / Total Conversions
-            cell = summaryRow.insertCell();
-            cell.textContent = sums[1] > 0 ? formatCurrency(sums[2] / sums[1], 'EUR', 2) : 'N/D';
-            cell.style.padding = '8px';
-
-            // Cell 7: Average CTR (Recalculate from total clicks/impressions for accuracy if possible, else average of percentages)
-            // For now, recalculate: (Total Clicks / Total Impressions) if Total Impressions > 0
-            cell = summaryRow.insertCell();
-            cell.textContent = sums[4] > 0 ? formatPercentage(sums[3] / sums[4]) : 'N/D'; // CTR = Clicks / Impressions
-            cell.style.padding = '8px';
+            // 3. Total Conversioni (sums[1])
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = formatNumber(sums[1]);
+            summaryCell.style.padding = '8px';
             
-            // Cell 8: Average CPC Medio (Recalculate: Total Cost / Total Clicks)
-            cell = summaryRow.insertCell();
-            cell.textContent = sums[3] > 0 ? formatCurrency(sums[2] / sums[3], 'EUR', 2) : 'N/D'; // CPC = Cost / Clicks
-            cell.style.padding = '8px';
+            // 4. Total Costo (sums[2])
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = formatCurrency(sums[2], 'EUR', 2);
+            summaryCell.style.padding = '8px';
 
-            // Cell 9: Empty for Actions column
-            cell = summaryRow.insertCell();
-            cell.style.padding = '8px';
+            // 5. Total Clic (sums[3])
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = formatNumber(sums[3]);
+            summaryCell.style.padding = '8px';
+
+            // 6. Total Impressioni (sums[4])
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = formatNumber(sums[4]);
+            summaryCell.style.padding = '8px';
+            
+            // 7. Average CPA Medio (Total Cost / Total Conversions)
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = sums[1] > 0 ? formatCurrency(sums[2] / sums[1], 'EUR', 2) : 'N/D';
+            summaryCell.style.padding = '8px';
+
+            // 8. Average CTR (Total Clicks / Total Impressions)
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = sums[4] > 0 ? formatPercentage(sums[3] / sums[4]) : 'N/D';
+            summaryCell.style.padding = '8px';
+            
+            // 9. Average CPC Medio (Total Cost / Total Clicks)
+            summaryCell = summaryRow.insertCell();
+            summaryCell.textContent = sums[3] > 0 ? formatCurrency(sums[2] / sums[3], 'EUR', 2) : 'N/D';
+            summaryCell.style.padding = '8px';
+
+            // 10. Empty cell for "Azioni" column
+            summaryCell = summaryRow.insertCell();
+            summaryCell.style.padding = '8px';
         }
 
         function saveAggregatedData() {
@@ -558,16 +547,15 @@
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
                 const rowData = {
-                    // Parse values from table cells back to raw numbers for storage
-                    // Order: Budget, Conversioni, Costo, Clic, Impressioni, CPA Medio, CTR, CPC Medio
-                    budget: parseFormattedValue(row.cells[0].textContent),
-                    conversions: parseFormattedValue(row.cells[1].textContent),
-                    cost: parseFormattedValue(row.cells[2].textContent),
-                    clicks: parseFormattedValue(row.cells[3].textContent),
-                    impressions: parseFormattedValue(row.cells[4].textContent),
-                    avgCpa: parseFormattedValue(row.cells[5].textContent),
-                    ctr: parseFormattedValue(row.cells[6].textContent), // parseFormattedValue handles '%'
-                    avgCpc: parseFormattedValue(row.cells[7].textContent)
+                    sourceName: row.cells[0].textContent, // Save source name
+                    budget: parseFormattedValue(row.cells[1].textContent),    // Index shifted by 1
+                    conversions: parseFormattedValue(row.cells[2].textContent), // Index shifted
+                    cost: parseFormattedValue(row.cells[3].textContent),       // Index shifted
+                    clicks: parseFormattedValue(row.cells[4].textContent),      // Index shifted
+                    impressions: parseFormattedValue(row.cells[5].textContent), // Index shifted
+                    avgCpa: parseFormattedValue(row.cells[6].textContent),     // Index shifted
+                    ctr: parseFormattedValue(row.cells[7].textContent),        // Index shifted
+                    avgCpc: parseFormattedValue(row.cells[8].textContent)      // Index shifted
                 };
                 dataToSave.push(rowData);
             }
@@ -580,6 +568,7 @@
             const newRow = tableBody.insertRow();
 
             const cellsData = [
+                rowData.sourceName, // Use sourceName from rowData
                 formatCurrency(rowData.budget),
                 formatNumber(rowData.conversions),
                 formatCurrency(rowData.cost, 'EUR', 2),
@@ -664,10 +653,32 @@
             let tableString = `"Metrica"	"Valore"\n`; 
 
             dataToCopy.forEach(item => {
-                let valueStr = item.value;
+                let valueStr;
                 if (typeof item.value === 'number') {
-                    valueStr = item.value.toString().replace(',', '.'); 
+                    // Apply it-IT locale formatting for numbers
+                    if (item.label === "CTR") {
+                        // For CTR, format as a number with more precision, using comma decimal
+                        valueStr = item.value.toLocaleString('it-IT', { 
+                            minimumFractionDigits: 4, // Or as many as make sense for CTR's precision
+                            maximumFractionDigits: 4  // Adjust as needed
+                        });
+                    } else if (item.label === "Costo" || item.label === "CPA Medio" || item.label === "CPC Medio") {
+                        // For currency-like values with 2 decimal places
+                        valueStr = item.value.toLocaleString('it-IT', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    } else {
+                        // For whole numbers like Budget, Conversioni, Clic, Impressioni
+                        valueStr = item.value.toLocaleString('it-IT', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0
+                        });
+                    }
+                } else {
+                    valueStr = item.value; // Should not happen if rawData is structured correctly
                 }
+                // Ensure the (potentially locale-formatted) string is quoted
                 tableString += `"${item.label}"	"${valueStr}"\n`;
             });
 
