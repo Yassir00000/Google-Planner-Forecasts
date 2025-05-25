@@ -253,6 +253,7 @@
         const defaultFixedTooltipContent = `<span class="placeholder">Passa il mouse sul grafico per vedere i dettagli o carica i dati...</span>`;
 
         function updateFixedTooltipUI(pointData) {
+            console.log('updateFixedTooltipUI called with pointData:', pointData);
             const addDataButton = document.getElementById('addDataButton'); // Ensure we have the reference
             const copyButton = document.getElementById('copyTooltipButton'); // Ensure we have the reference
 
@@ -261,6 +262,7 @@
                 if (copyButton) copyButton.disabled = true;
                 if (addDataButton) addDataButton.disabled = true; 
                 selectedChartPointData = null; // Safeguard: clear selected data if tooltip is cleared
+                console.log('updateFixedTooltipUI: Buttons disabled due to null pointData.');
             } else {
                 let innerHtml = `
                     <span class="label">Budget:</span><span class="value">${formatCurrency(pointData.budget)}</span>
@@ -280,12 +282,16 @@
         }
 
         function handleAddData() {
+            console.log('handleAddData function called.');
+            console.log('selectedChartPointData at start of handleAddData:', selectedChartPointData);
             if (!selectedChartPointData) { // Use selectedChartPointData
                 alert("Nessun dato selezionato da aggiungere. Clicca su un punto del grafico per selezionare i dati.");
                 const addDataButton = document.getElementById('addDataButton');
                 if (addDataButton) addDataButton.disabled = true; // Ensure disabled state
+                console.log('handleAddData: Guard triggered, returning early.');
                 return;
             }
+            console.log('handleAddData: Proceeding to add data to table.');
 
             const tableBody = document.getElementById('aggregatedDataTable').getElementsByTagName('tbody')[0];
             const newRow = tableBody.insertRow();
@@ -330,6 +336,7 @@
             // Placeholder calls - these functions will be implemented in later steps
             updateSummaryRow(); 
             saveAggregatedData();
+            console.log('handleAddData: Row added to table. Calling updateSummaryRow and saveAggregatedData.');
         }
 
         const availableJsonFiles = [
@@ -343,6 +350,7 @@
             selectedChartPointData = null;
             currentTooltipRawData = null;
             updateFixedTooltipUI(null); // Clears fixed display and disables buttons
+            console.log('loadSelectedJsonData: Selection and hover data cleared, buttons disabled.');
 
             const jsonDropdown = document.getElementById('jsonDropdown'); // Get dropdown inside function to ensure it's available
             const selectedFilePath = jsonDropdown.value;
@@ -627,15 +635,18 @@
        }
         
         function copyTooltipData() {
+            console.log('copyTooltipData function called.');
+            console.log('selectedChartPointData at start of copyTooltipData:', selectedChartPointData);
             // Primary guard: only proceed if a point has been clicked and its data is in selectedChartPointData.
             // The placeholder check is also good as an additional safeguard for UI state.
             if (!selectedChartPointData || fixedTooltipDisplayEl.querySelector('.placeholder')) {
                 console.warn("Tentativo di copia: Nessun dato selezionato tramite click o placeholder attivo.");
                 // Ensure button is disabled if this state is somehow reached
                 if (copyButton) copyButton.disabled = true;
+                console.log('copyTooltipData: Guard triggered, returning early.');
                 return; 
             }
-
+            console.log('copyTooltipData: Proceeding with copy operation.');
             // Data source is now definitively selectedChartPointData
             const rawData = selectedChartPointData;
 
@@ -660,8 +671,10 @@
                 tableString += `"${item.label}"	"${valueStr}"\n`;
             });
 
+            console.log('copyTooltipData: Attempting to write to clipboard. tableString:', tableString.trim());
             navigator.clipboard.writeText(tableString.trim())
                 .then(() => {
+                    console.log('copyTooltipData: Clipboard writeText successful.');
                     const originalText = copyButton.textContent;
                     copyButton.textContent = 'Copiato!';
                     copyButton.disabled = true;
@@ -674,6 +687,7 @@
                 })
                 .catch(err => {
                     console.error('Errore durante la copia negli appunti:', err);
+                    console.log('copyTooltipData: Clipboard writeText failed. Error object:', err);
                     alert('Errore durante la copia. Assicurati che la pagina sia servita tramite HTTPS o localhost e che il browser abbia i permessi.');
                 });
         }
@@ -736,25 +750,32 @@
                         }
                     },
                     onClick: function(event, elements) {
+                        console.log('Chart onClick triggered. elements:', elements);
                         const addDataButton = document.getElementById('addDataButton'); // Ensure ref
                         if (elements.length > 0) {
                             const firstElement = elements[0];
                             const activePointIndex = firstElement.index;
                             const pointData = fullChartDataPoints[activePointIndex];
+                            console.log('Clicked point index:', activePointIndex, 'Raw pointData:', pointData);
 
                             if (pointData) {
                                 selectedChartPointData = pointData; 
+                                console.log('selectedChartPointData set to:', selectedChartPointData);
                                 updateFixedTooltipUI(selectedChartPointData); 
 
+                                console.log('Enabling copyButton. Current textContent:', copyButton ? copyButton.textContent : 'N/A');
                                 if (copyButton && copyButton.textContent !== 'Copiato!') copyButton.disabled = false;
+                                console.log('Enabling addDataButton.');
                                 if (addDataButton) addDataButton.disabled = false;
                             } else {
+                                console.log('Disabling buttons because no valid point was clicked or pointData is invalid.');
                                 selectedChartPointData = null;
                                 updateFixedTooltipUI(null); 
                                 if (copyButton) copyButton.disabled = true;
                                 if (addDataButton) addDataButton.disabled = true;
                             }
                         } else {
+                            console.log('Disabling buttons because no valid point was clicked or pointData is invalid.');
                             selectedChartPointData = null;
                             updateFixedTooltipUI(null); 
                             if (copyButton) copyButton.disabled = true;
@@ -913,6 +934,11 @@
         document.addEventListener('DOMContentLoaded', () => {
             const jsonDropdown = document.getElementById('jsonDropdown');
             const addDataButton = document.getElementById('addDataButton');
+            console.log('Add Data button found:', addDataButton ? 'Yes' : 'No');
+
+            const copyButton = document.getElementById('copyTooltipButton'); // Already defined globally, but good to have ref here if needed
+            console.log('Copy button found:', copyButton ? 'Yes' : 'No');
+
 
             availableJsonFiles.forEach(item => {
                 const option = document.createElement('option');
@@ -925,6 +951,7 @@
             if (addDataButton) {
                 addDataButton.disabled = true;
                 addDataButton.addEventListener('click', handleAddData);
+                console.log('Event listener for addDataButton attached.');
             }
 
             if (copyButton) copyButton.disabled = true; 
