@@ -152,9 +152,8 @@
     </script> <!-- Fine contenitore JSON -->
 
     <div class="json-input-container">
-        <h3>Verifica o modifica il JSON qui (opzionale):</h3>
-        <textarea id="jsonInput" placeholder="Il JSON dal tag <script> verrà caricato qui. Puoi modificarlo e ri-cliccare il pulsante."></textarea>
-        <button onclick="updateUIFromPastedJSON()">Aggiorna Grafico con JSON</button>
+        <label for="jsonSelector">Seleziona JSON:</label>
+        <select id="jsonSelector"></select>
         <div id="jsonParseError" class="error-message"></div>
     </div>
 
@@ -164,18 +163,23 @@
                 <span class="placeholder">Passa il mouse sul grafico per vedere i dettagli...</span>
             </div>
             <button id="copyTooltipButton" onclick="copyTooltipData()" title="Copia i dati del tooltip in formato tabella (CTRL+C)">Copia Dati</button>
+            <button id="addButton">Aggiungi</button>
         </div>
         <div class="chart-container">
             <canvas id="forecastChart"></canvas>
         </div>
     </div>
+    <div id="dataTableContainer"></div>
 
     <script>
         const ctx = document.getElementById('forecastChart').getContext('2d');
         const fixedTooltipDisplayEl = document.getElementById('fixedChartTooltipDisplay');
-        const jsonParseErrorDiv = document.getElementById('jsonParseError');
-        const jsonInputElement = document.getElementById('jsonInput');
+        const jsonParseErrorDiv = document.getElementById('jsonParseError'); // Now correctly placed in HTML
+        const jsonSelectorElement = document.getElementById('jsonSelector'); // Changed from jsonInputElement
         const copyButton = document.getElementById('copyTooltipButton'); // Riferimento al pulsante Copia
+        const addButtonElement = document.getElementById('addButton');
+        const dataTableContainerElement = document.getElementById('dataTableContainer');
+        let dataTableElement; // To store the dynamically created table
         let forecastChart;
         let fullChartDataPoints = [];
 
@@ -217,7 +221,6 @@
             const placeholder = tooltipContentEl.querySelector('.placeholder');
 
             if (placeholder) {
-                // Questo caso non dovrebbe accadere se il pulsante è correttamente disabilitato
                 console.warn("Tentativo di copia quando il tooltip mostra un placeholder.");
                 return; 
             }
@@ -230,11 +233,20 @@
                 return; 
             }
 
-            let tableString = "Metrica\tValore\n"; 
+            function escapeCSVField(field) {
+                if (typeof field !== 'string') return String(field); // Ensure it's a string
+                return field.replace(/"/g, '""');
+            }
+
+            let tableString = "\"Metrica\"\t\"Valore\"\n"; // Quoted header
             for (let i = 0; i < labels.length; i++) {
                 const labelText = labels[i].textContent.trim().replace(':', '').trim(); 
                 const valueText = values[i].textContent.trim();
-                tableString += `${labelText}\t${valueText}\n`;
+                
+                const escapedLabel = escapeCSVField(labelText);
+                const escapedValue = escapeCSVField(valueText);
+
+                tableString += `"${escapedLabel}"\t"${escapedValue}"\n`;
             }
 
             navigator.clipboard.writeText(tableString.trim())
@@ -266,6 +278,7 @@
 
             fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
             if (copyButton) copyButton.disabled = true;
+            if (addButtonElement) addButtonElement.disabled = true;
 
             forecastChart = new Chart(ctx, {
                 type: 'line',
@@ -296,6 +309,7 @@
                                 if (!pointData) {
                                     fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
                                     if (copyButton) copyButton.disabled = true;
+                                    if (addButtonElement) addButtonElement.disabled = true;
                                     return;
                                 }
 
@@ -311,6 +325,7 @@
                                 `;
                                 fixedTooltipDisplayEl.innerHTML = innerHtml;
                                 if (copyButton && copyButton.textContent !== 'Copiato!') copyButton.disabled = false;
+                                if (addButtonElement) addButtonElement.disabled = false; // Enable add button
                             }
                         }
                     },
@@ -325,6 +340,7 @@
                         if (chartElement.length === 0 && forecastChart && forecastChart.tooltip && forecastChart.tooltip.getActiveElements().length === 0) {
                              fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
                              if (copyButton) copyButton.disabled = true;
+                             if (addButtonElement) addButtonElement.disabled = true;
                         }
                     }
                 }
@@ -332,7 +348,7 @@
         }
         
         function displayJsonParseError(message) {
-            jsonParseErrorDiv.textContent = message;
+            if (jsonParseErrorDiv) jsonParseErrorDiv.textContent = message; // Check if div exists
             console.error(message);
             initializeChart(
                 ['N/D'], [0],
@@ -342,37 +358,247 @@
             );
             fixedTooltipDisplayEl.innerHTML = `<span class="placeholder">${message}</span>`;
             if (copyButton) copyButton.disabled = true;
+            if (addButtonElement) addButtonElement.disabled = true;
         }
-        
-        function loadJsonFromTagToTextarea() {
-            const jsonDataElement = document.getElementById('jsonDataContainer');
-            if (jsonDataElement) {
-                const jsonContent = jsonDataElement.textContent.trim();
-                if (jsonInputElement) {
-                    jsonInputElement.value = jsonContent;
+
+        function parseCellValue(valueString) {
+            if (typeof valueString !== 'string') return NaN;
+            const cleanedString = valueString
+                .replace(/€/g, '')
+                .replace(/%/g, '')
+                .replace(/\./g, '') // Remove thousands separators (it-IT)
+                .replace(/,/g, '.'); // Replace decimal comma with period (it-IT)
+            return parseFloat(cleanedString.trim());
+        }
+
+        function updateSummaryRow() {
+            if (!dataTableElement || !dataTableElement.tHead || !dataTableElement.tHead.rows[0]) {
+                console.warn("Tabella o header non pronti per la riga di riepilogo.");
+                return;
+            }
+
+            let tfoot = dataTableElement.tFoot;
+            if (!tfoot) {
+                tfoot = dataTableElement.createTFoot();
+            }
+            while (tfoot.firstChild) {
+                tfoot.removeChild(tfoot.firstChild);
+            }
+            const summaryRow = tfoot.insertRow();
+            summaryRow.insertCell().textContent = 'Totale/Media';
+
+            const numDataColumns = dataTableElement.tHead.rows[0].cells.length - 2; // Exclude first label and last 'Azioni'
+
+            for (let i = 1; i <= numDataColumns; i++) { // Iterate through data cell indices (1 to numDataColumns)
+                let sum = 0;
+                let successfullyParsedCount = 0;
+                const headerText = dataTableElement.tHead.rows[0].cells[i].textContent;
+
+                for (const row of dataTableElement.tBodies[0].rows) {
+                    if (row.cells[i]) {
+                        const cellValue = row.cells[i].textContent;
+                        const parsedValue = parseCellValue(cellValue);
+                        if (!isNaN(parsedValue)) {
+                            sum += parsedValue;
+                            successfullyParsedCount++;
+                        }
+                    }
+                }
+
+                const summaryCell = summaryRow.insertCell();
+                if (successfullyParsedCount > 0) {
+                    let displayValue;
+                    if (headerText === 'CTR' || headerText === 'CPA Medio' || headerText === 'CPC Medio') {
+                        const average = sum / successfullyParsedCount;
+                        if (headerText === 'CTR') displayValue = formatPercentage(average);
+                        else displayValue = formatCurrency(average, 'EUR', 2);
+                    } else {
+                        if (headerText === 'Conversioni' || headerText === 'Clic' || headerText === 'Impressioni') displayValue = formatNumber(sum);
+                        else if (headerText === 'Budget') displayValue = formatCurrency(sum, 'EUR', 0);
+                        else if (headerText === 'Costo') displayValue = formatCurrency(sum, 'EUR', 2);
+                        else displayValue = formatNumber(sum); 
+                    }
+                    summaryCell.textContent = displayValue;
+                } else {
+                    summaryCell.textContent = 'N/D';
+                }
+            }
+
+            if (dataTableElement.tHead.rows[0].cells.length > numDataColumns + 1) { // If 'Azioni' column exists
+                summaryRow.insertCell().textContent = ''; // Empty cell for 'Azioni'
+            }
+        }
+
+        function deleteTableRow(event) {
+            if (!event.target.classList.contains('delete-row-btn')) {
+                return; // Exit if the click was not on a delete button
+            }
+            const deleteButton = event.target;
+            const rowToDelete = deleteButton.closest('tr');
+            if (rowToDelete) {
+                rowToDelete.remove();
+                updateSummaryRow(); // Call after row removal
+                saveTableToLocalStorage(); 
+            }
+        }
+
+        function saveTableToLocalStorage() {
+            if (!dataTableElement || !dataTableElement.tBodies[0] || !dataTableElement.tHead || !dataTableElement.tHead.rows[0]) {
+                console.warn("Tabella non pronta per il salvataggio in localStorage.");
+                return;
+            }
+
+            const headers = [];
+            // Get headers, excluding the last one ('Azioni')
+            for (let i = 0; i < dataTableElement.tHead.rows[0].cells.length - 1; i++) {
+                headers.push(dataTableElement.tHead.rows[0].cells[i].textContent);
+            }
+            
+            const dataToSave = [];
+            for (const row of dataTableElement.tBodies[0].rows) {
+                const rowData = {};
+                for (let j = 0; j < headers.length; j++) {
+                    if (row.cells[j]) {
+                        rowData[headers[j]] = row.cells[j].textContent;
+                    }
+                }
+                dataToSave.push(rowData);
+            }
+            localStorage.setItem('savedDataTableData', JSON.stringify(dataToSave));
+        }
+
+        function loadTableFromLocalStorage() {
+            const savedDataJson = localStorage.getItem('savedDataTableData');
+            if (!savedDataJson) {
+                return;
+            }
+
+            let loadedData;
+            try {
+                loadedData = JSON.parse(savedDataJson);
+            } catch (error) {
+                console.error("Errore durante il parsing dei dati da localStorage:", error);
+                return;
+            }
+            
+            if (!Array.isArray(loadedData) || loadedData.length === 0) {
+                return;
+            }
+
+            createTableIfNotExists(); // Ensure table structure is ready
+            const tbody = dataTableElement.tBodies[0];
+            tbody.innerHTML = ''; // Clear existing rows before loading
+
+            const tableHeaders = [];
+            for (let i = 0; i < dataTableElement.tHead.rows[0].cells.length - 1; i++) {
+                tableHeaders.push(dataTableElement.tHead.rows[0].cells[i].textContent);
+            }
+
+            loadedData.forEach(rowDataObject => {
+                const newRow = tbody.insertRow();
+                tableHeaders.forEach(headerText => {
+                    const cell = newRow.insertCell();
+                    cell.textContent = rowDataObject[headerText] || '';
+                });
+
+                const actionsCell = newRow.insertCell();
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Elimina';
+                deleteButton.className = 'delete-row-btn';
+                actionsCell.appendChild(deleteButton);
+            });
+            updateSummaryRow();
+        }
+
+        function createTableIfNotExists() {
+            if (!dataTableElement || !document.body.contains(dataTableElement)) {
+                if (dataTableElement) dataTableElement.remove(); // Remove if exists but not in DOM (e.g. after error)
+
+                dataTableElement = document.createElement('table');
+                dataTableElement.id = 'dataDetailTable';
+                // Example: dataTableElement.className = 'details-table'; // Add your desired class for styling
+                
+                const thead = dataTableElement.createTHead();
+                const headerRow = thead.insertRow();
+                const headers = ['Budget', 'Conversioni', 'Costo', 'Clic', 'Impressioni', 'CPA Medio', 'CTR', 'CPC Medio', 'Azioni'];
+                headers.forEach(headerText => {
+                    const th = document.createElement('th');
+                    th.textContent = headerText;
+                    headerRow.appendChild(th);
+                });
+                const tbody = dataTableElement.createTBody(); // Create and get tbody
+                tbody.addEventListener('click', deleteTableRow); // Add event listener
+
+                if (dataTableContainerElement) {
+                    dataTableContainerElement.innerHTML = ''; // Clear previous content if any
+                    dataTableContainerElement.appendChild(dataTableElement);
+                } else {
+                    console.error("Contenitore della tabella dati ('dataTableContainerElement') non trovato.");
                 }
             }
         }
 
-        function updateUIFromPastedJSON() {
-            const jsonString = jsonInputElement.value; 
-            jsonParseErrorDiv.textContent = ''; 
+        function addDataToTable() {
+            if (!fixedTooltipDisplayEl) {
+                alert("Elemento Tooltip non trovato.");
+                return;
+            }
+            if (fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                alert('Nessun dato da aggiungere. Passa il mouse su un punto del grafico.');
+                return;
+            }
 
-            if (!jsonString) {
-                displayJsonParseError("Per favore, incolla il JSON nell'area di testo o assicurati che sia caricato dal tag script.");
+            createTableIfNotExists(); // Assicura che la tabella esista
+
+            const dataValues = [];
+            const labelsOrder = ['Budget:', 'Conversioni:', 'Costo:', 'Clic:', 'Impressioni:', 'CPA Medio:', 'CTR:', 'CPC Medio:'];
+            
+            const currentLabels = Array.from(fixedTooltipDisplayEl.querySelectorAll('.label'));
+            const currentValues = Array.from(fixedTooltipDisplayEl.querySelectorAll('.value'));
+
+            labelsOrder.forEach(labelText => {
+                const labelElement = currentLabels.find(el => el.textContent.trim() === labelText);
+                if (labelElement && labelElement.nextElementSibling && labelElement.nextElementSibling.classList.contains('value')) {
+                    dataValues.push(labelElement.nextElementSibling.textContent);
+                } else {
+                    dataValues.push('N/D'); // Push N/D if specific label not found
+                }
+            });
+
+
+            if (!dataTableElement || !dataTableElement.tBodies[0]) {
+                console.error("Tabella o corpo della tabella non inizializzati correttamente.");
+                return;
+            }
+            const newRow = dataTableElement.tBodies[0].insertRow();
+            dataValues.forEach(value => {
+                const cell = newRow.insertCell();
+                cell.textContent = value;
+            });
+
+            const actionsCell = newRow.insertCell();
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Elimina';
+            deleteButton.className = 'delete-row-btn';
+            // Event listener for deleteButton is now on tbody, no need to add individually here.
+            actionsCell.appendChild(deleteButton);
+            updateSummaryRow(); // Call after adding a new row
+            saveTableToLocalStorage();
+        }
+
+        // Renamed from updateUIFromPastedJSON and refactored
+        function renderChartWithData(chartSpecificJsonString) {
+            fullChartDataPoints = []; // Reset data points for new chart
+            if (jsonParseErrorDiv) jsonParseErrorDiv.textContent = '';
+
+
+            if (!chartSpecificJsonString) {
+                displayJsonParseError("Nessuna stringa JSON specifica per il grafico fornita per il rendering.");
                 return;
             }
 
             try {
-                const rawDataObject = JSON.parse(jsonString); 
-
-                if (!rawDataObject || !rawDataObject["2"] || !Array.isArray(rawDataObject["2"]) || rawDataObject["2"].length < 5) {
-                    displayJsonParseError("Il JSON incollato non ha la struttura attesa (proprietà '2' come array con almeno 5 elementi stringa).");
-                    return;
-                }
-                
-                const chartDataString = rawDataObject["2"][4]; 
-                const parsedChartDataContainer = JSON.parse(chartDataString); 
+                const parsedChartDataContainer = JSON.parse(chartSpecificJsonString); 
 
                 const IDX_CLICKS = 0;
                 const IDX_COST_MICROS = 1;
@@ -380,7 +606,7 @@
                 const IDX_CONVERSIONS = 3;
                 const IDX_AVG_CPA_MICROS = 4;
 
-                fullChartDataPoints = [];
+                // fullChartDataPoints is reset at the beginning of this function now.
 
                 if (parsedChartDataContainer && parsedChartDataContainer["2"] && Array.isArray(parsedChartDataContainer["2"])) {
                     parsedChartDataContainer["2"].forEach(point => {
@@ -432,30 +658,102 @@
 
                     initializeChart(chartLabels, chartValuesForYAxis, 'Budget giornaliero (€)', 'Conversioni', 'Previsione Conversioni');
                 } else {
-                    initializeChart( // Chiamata a initializeChart gestirà copyButton.disabled
+                    initializeChart(
                         [formatCurrency(0)], [0],
                         'Budget giornaliero (€)',
                         'Conversioni (Nessun dato valido per il grafico)',
                         'Previsione Conversioni'
                     );
                      fixedTooltipDisplayEl.innerHTML = `<span class="placeholder">Nessun punto dati valido trovato per il grafico.</span>`;
-                     if (copyButton) copyButton.disabled = true; // Doppia sicurezza, ma initializeChart dovrebbe già farlo.
+                     if (copyButton) copyButton.disabled = true;
                 }
 
             } catch (error) {
-                displayJsonParseError("Errore durante l'analisi del JSON: " + error.message + ". Controlla la console per dettagli e assicurati che il JSON incollato sia valido.");
-                console.error("Errore parsing JSON:", error, "Stringa JSON problematica:", jsonString);
+                displayJsonParseError("Errore durante l'analisi del JSON specifico per il grafico: " + error.message);
+                console.error("Errore parsing JSON specifico per il grafico:", error, "Stringa JSON problematica:", chartSpecificJsonString);
+            }
+        }
+
+        function loadAndProcessSelectedJsonData() {
+            if (jsonParseErrorDiv) jsonParseErrorDiv.textContent = '';
+            fullChartDataPoints = []; // Reset global data points array
+
+            const jsonDataElement = document.getElementById('jsonDataContainer');
+            if (!jsonDataElement) {
+                displayJsonParseError("Elemento contenitore JSON ('jsonDataContainer') non trovato.");
+                return;
+            }
+
+            let outerJson;
+            try {
+                outerJson = JSON.parse(jsonDataElement.textContent.trim());
+            } catch (error) {
+                displayJsonParseError("Errore durante l'analisi del JSON principale da jsonDataContainer: " + error.message);
+                return;
+            }
+
+            if (!outerJson || !outerJson["2"] || !Array.isArray(outerJson["2"])) {
+                displayJsonParseError("Struttura del JSON principale non valida o proprietà '2' non trovata/non è un array.");
+                return;
+            }
+
+            // For now, assume "Automation-1" is selected, which corresponds to outerJson["2"][0]
+            // Later, this will use jsonSelectorElement.value to pick the correct index or key
+            const selectedJsonString = outerJson["2"][0]; // This is one of the large JSON strings
+
+            if (!selectedJsonString) {
+                displayJsonParseError("Il dataset JSON selezionato (Automation-1) non è stato trovato nel contenitore dati.");
+                return;
+            }
+
+            try {
+                const selectedDataSetObject = JSON.parse(selectedJsonString);
+
+                if (!selectedDataSetObject || !selectedDataSetObject["2"] || !Array.isArray(selectedDataSetObject["2"]) || selectedDataSetObject["2"].length < 5) {
+                     displayJsonParseError("Il JSON selezionato (Automation-1) non ha la struttura attesa (proprietà '2' come array con almeno 5 elementi stringa).");
+                     return;
+                }
+                const chartSpecificJsonString = selectedDataSetObject["2"][4]; // This is the JSON string for the chart data
+                renderChartWithData(chartSpecificJsonString);
+
+            } catch (error) {
+                displayJsonParseError("Errore durante l'analisi del JSON del dataset selezionato (Automation-1): " + error.message);
+                console.error("Errore parsing JSON (Automation-1):", error, "Stringa JSON problematica:", selectedJsonString);
             }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            if (copyButton) copyButton.disabled = true; // Disabilita all'avvio
-            initializeChart( // Questa chiamata imposterà il tooltip e disabiliterà il pulsante
+            if (copyButton) copyButton.disabled = true; 
+            if (addButtonElement) addButtonElement.disabled = true;
+            
+            createTableIfNotExists(); // Create table structure on load
+            loadTableFromLocalStorage(); // Load data from localStorage
+            // updateSummaryRow(); // Called within loadTableFromLocalStorage if data is loaded, or initialize empty table
+
+            initializeChart(
                 [], [],
-                'Budget giornaliero medio (€)', 'Conversioni', 'Previsione Conversioni (Carica i dati)'
+                'Budget giornaliero medio (€)', 'Conversioni', 'Previsione Conversioni (Nessun dato caricato)'
             );
-            loadJsonFromTagToTextarea();
-            updateUIFromPastedJSON(); 
+
+            if (jsonSelectorElement) {
+                const option1 = document.createElement('option');
+                option1.value = '0'; // Using index 0 for Automation-1, as it's outerJson["2"][0]
+                option1.textContent = 'Automation-1 Data';
+                jsonSelectorElement.appendChild(option1);
+
+                jsonSelectorElement.addEventListener('change', loadAndProcessSelectedJsonData);
+                
+                // Load initial data based on the default selection
+                loadAndProcessSelectedJsonData();
+            } else {
+                displayJsonParseError("Elemento select '#jsonSelector' non trovato.");
+            }
+
+            if (addButtonElement) {
+                addButtonElement.addEventListener('click', addDataToTable);
+            } else {
+                console.error("Pulsante 'Aggiungi' ('addButtonElement') non trovato.");
+            }
         });
     </script>
 </body>
