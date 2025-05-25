@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grafico Previsioni da JSON Google</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .json-input-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1000px;
+            box-sizing: border-box;
+        }
+        .json-input-container textarea {
+            width: 100%;
+            min-height: 150px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        .json-input-container button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .json-input-container button:hover {
+            background-color: #174ea6;
+        }
+        .chart-display-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 1000px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .tooltip-controls { /* Nuovo wrapper per tooltip e pulsante di copia */
+            display: flex;
+            align-items: flex-start; 
+            gap: 15px; 
+            margin-bottom: 20px; 
+        }
+
+        .fixed-chart-tooltip {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 10px;
+            /* margin-bottom: 20px; -- rimosso, gestito da tooltip-controls */
+            font-size: 0.85em;
+            color: #333;
+            min-height: 8em;
+            display: grid;
+            grid-template-columns: auto 1fr auto 1fr;
+            gap: 5px 15px;
+            align-items: center;
+            flex-grow: 1; /* Occupa lo spazio disponibile */
+        }
+        .fixed-chart-tooltip .label {
+            color: #5f6368;
+            text-align: right;
+        }
+        .fixed-chart-tooltip .value {
+            font-weight: 500;
+            color: #1a73e8;
+            text-align: left;
+        }
+        .fixed-chart-tooltip .placeholder {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #757575;
+            font-style: italic;
+            padding: 10px 0;
+        }
+
+        #copyTooltipButton { /* Stile per il nuovo pulsante */
+            background-color: #28a745; /* Verde */
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s;
+            height: fit-content; 
+            flex-shrink: 0; 
+        }
+        #copyTooltipButton:hover:not(:disabled) {
+            background-color: #218838;
+        }
+        #copyTooltipButton:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .error-message {
+            color: red;
+            font-size: 0.9em;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Contenitore per il JSON -->
+    <script id="jsonDataContainer" type="application/json">
+{
+    "2": [
+        "{\"4\":{\"3\":{\"1\":0,\"3\":{\"1\":[{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"AVERAGE_CPA_MICROS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}},{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"CONVERSIONS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}}]}},\"4\":\"2462873650389287394\"},\"6\":{\"1\":[{\"1\":[{\"1\":2,\"2\":2616715},{\"1\":3,\"2\":1747502},{\"1\":4,\"2\":2100089}],\"2\":\"cost_per_click\"},{\"1\":[{\"1\":2,\"2\":130300.453125},{\"1\":3,\"2\":50128.9375},{\"1\":4,\"2\":3626.253662109375}],\"2\":\"clicks\"},{\"1\":[{\"1\":2,\"2\":0.08532301336526871},{\"1\":3,\"2\":0.04880068823695183},{\"1\":4,\"2\":0.13692666590213776}],\"2\":\"click_through_rate\"},{\"1\":[{\"1\":2,\"2\":339482000000},{\"1\":3,\"2\":87205000000},{\"1\":4,\"2\":7690000000}],\"2\":\"cost_micros\"},{\"1\":[{\"1\":2,\"2\":3978536},{\"1\":3,\"2\":1786966},{\"1\":4,\"2\":56163}],\"2\":\"impressions\"}]},\"3\":\"IT\",\"5\":\"EUR\"}",
+        "{\"4\":{\"3\":{\"1\":0,\"3\":{\"1\":[{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"AVERAGE_CPA_MICROS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}},{\"1\":16,\"2\":{\"1\":\"campaign_spec.fields\",\"2\":\"CONVERSIONS field cannot be calculated: Insufficient Conversion Data. Conversion rate is not available.\"}}]}},\"4\":\"2462873650389287394\"}",
+        "{\"1\":{\"1\":[{\"1\":10000000,\"2\":1000000000000}],\"2\":7},\"2\":1}",
+        "{\"1\":1,\"2\":7,\"3\":16000000,\"4\":true}",
+        "{\"2\":[{\"3\":\"10111816\",\"200\":{\"1\":[\"1303.00453125\",\"3394820000\",\"39785.36\",\"0\",\"0\"]}},{\"3\":\"10689582\",\"200\":{\"1\":[\"2358.496\",\"5765880000\",\"68822.08\",\"0\",\"0\"]}},{\"3\":\"11267348\",\"200\":{\"1\":[\"3646.2786\",\"8628200000\",\"101202.56\",\"0\",\"0\"]}},{\"3\":\"11845114\",\"200\":{\"1\":[\"5158.0483\",\"12005900000\",\"137115.88\",\"0\",\"0\"]}},{\"3\":\"12422880\",\"200\":{\"1\":[\"6882.0117\",\"15916600000\",\"176728.64\",\"0\",\"0\"]}},{\"3\":\"13000646\",\"200\":{\"1\":[\"8804.265\",\"20372900000\",\"220192.92\",\"0\",\"0\"]}},{\"3\":\"13578412\",\"200\":{\"1\":[\"10909.893\",\"25382900000\",\"267648.84\",\"0\",\"0\"]}},{\"3\":\"14156178\",\"200\":{\"1\":[\"13182.453\",\"30949000000\",\"319222.84\",\"0\",\"0\"]}},{\"3\":\"14733944\",\"200\":{\"1\":[\"15604.828\",\"37068300000\",\"375029.84\",\"0\",\"0\"]}},{\"3\":\"15311710\",\"200\":{\"1\":[\"18158.836\",\"43732300000\",\"435177.64\",\"0\",\"0\"]}},{\"3\":\"15889476\",\"200\":{\"1\":[\"20825.844\",\"50928300000\",\"499760.8\",\"0\",\"0\"]}},{\"3\":\"16000000\",\"200\":{\"1\":[\"21143.59\",\"51799390000\",\"507748.6\",\"0\",\"0\"]}},{\"3\":\"16467242\",\"200\":{\"1\":[\"23586.51\",\"58640100000\",\"568858.08\",\"0\",\"0\"]}},{\"3\":\"17045008\",\"200\":{\"1\":[\"26421.854\",\"66846700000\",\"642539.64\",\"0\",\"0\"]}},{\"3\":\"17622774\",\"200\":{\"1\":[\"29311.803\",\"75522800000\",\"720858.2\",\"0\",\"0\"]}},{\"3\":\"18200540\",\"200\":{\"1\":[\"32237.867\",\"84640200000\",\"803850.6\",\"0\",\"0\"]}},{\"3\":\"18778306\",\"200\":{\"1\":[\"35182.555\",\"94170000000\",\"891548.6\",\"0\",\"0\"]}},{\"3\":\"19356072\",\"200\":{\"1\":[\"38130.477\",\"104081000000\",\"983967.0\",\"0\",\"0\"]}},{\"3\":\"19933838\",\"200\":{\"1\":[\"41068.863\",\"114344000000\",\"1081108.0\",\"0\",\"0\"]}},{\"3\":\"20511604\",\"200\":{\"1\":[\"43987.086\",\"124931000000\",\"1182959.0\",\"0\",\"0\"]}},{\"3\":\"21089370\",\"200\":{\"1\":[\"46876.445\",\"135814000000\",\"1289500.0\",\"0\",\"0\"]}},{\"3\":\"21667136\",\"200\":{\"1\":[\"49730.402\",\"146962000000\",\"1399992.0\",\"0\",\"0\"]}},{\"3\":\"22244902\",\"200\":{\"1\":[\"52543.957\",\"158349000000\",\"1514412.0\",\"0\",\"0\"]}},{\"3\":\"22822668\",\"200\":{\"1\":[\"55313.582\",\"169948000000\",\"1632726.0\",\"0\",\"0\"]}},{\"3\":\"23400434\",\"200\":{\"1\":[\"58036.66\",\"181738000000\",\"1754888.0\",\"0\",\"0\"]}},{\"3\":\"23978200\",\"200\":{\"1\":[\"60711.324\",\"193698000000\",\"1880848.0\",\"0\",\"0\"]}},{\"3\":\"24555966\",\"200\":{\"1\":[\"63336.28\",\"205810000000\",\"2010556.0\",\"0\",\"0\"]}},{\"3\":\"25133732\",\"200\":{\"1\":[\"65909.645\",\"218056000000\",\"2143954.0\",\"0\",\"0\"]}},{\"3\":\"25711498\",\"200\":{\"1\":[\"68430.13\",\"230419000000\",\"2280980.0\",\"0\",\"0\"]}},{\"3\":\"25865045.91\",\"200\":{\"1\":[\"207571.625\",\"944074176080\",\"2991405.0\",\"4965.0146484375\",\"190145295\"]}}],\"3\":{\"2\":[{\"3\":\"clicks\"},{\"3\":\"cost_micros\"},{\"3\":\"impressions\"},{\"3\":\"conversions\"},{\"3\":\"avg_cpa_micros\"}]}}"
+    ]
+}
+    </script> <!-- Fine contenitore JSON -->
+
+    <div class="json-input-container">
+        <h3>Verifica o modifica il JSON qui (opzionale):</h3>
+        <textarea id="jsonInput" placeholder="Il JSON dal tag <script> verrà caricato qui. Puoi modificarlo e ri-cliccare il pulsante."></textarea>
+        <button onclick="updateUIFromPastedJSON()">Aggiorna Grafico con JSON</button>
+        <div id="jsonParseError" class="error-message"></div>
+    </div>
+
+    <div class="chart-display-container">
+        <div class="tooltip-controls">
+            <div id="fixedChartTooltipDisplay" class="fixed-chart-tooltip">
+                <span class="placeholder">Passa il mouse sul grafico per vedere i dettagli...</span>
+            </div>
+            <button id="copyTooltipButton" onclick="copyTooltipData()" title="Copia i dati del tooltip in formato tabella (CTRL+C)">Copia Dati</button>
+        </div>
+        <div class="chart-container">
+            <canvas id="forecastChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('forecastChart').getContext('2d');
+        const fixedTooltipDisplayEl = document.getElementById('fixedChartTooltipDisplay');
+        const jsonParseErrorDiv = document.getElementById('jsonParseError');
+        const jsonInputElement = document.getElementById('jsonInput');
+        const copyButton = document.getElementById('copyTooltipButton'); // Riferimento al pulsante Copia
+        let forecastChart;
+        let fullChartDataPoints = [];
+
+        const defaultFixedTooltipContent = `<span class="placeholder">Passa il mouse sul grafico per vedere i dettagli o carica i dati...</span>`;
+
+        function safeParseFloat(valueStr) {
+            if (valueStr === "" || valueStr === null || valueStr === undefined) return 0;
+            const cleanedStr = String(valueStr).replace(/[^\d.-]/g, '');
+            const num = parseFloat(cleanedStr);
+            return isNaN(num) ? 0 : num;
+        }
+
+        function formatCurrency(value, currency = 'EUR', decimalPlaces = 0) {
+            if (isNaN(value) || value === null || value === undefined) return 'N/D';
+            return value.toLocaleString('it-IT', {
+                style: 'currency',
+                currency: currency,
+                minimumFractionDigits: decimalPlaces,
+                maximumFractionDigits: decimalPlaces
+            });
+        }
+
+        function formatNumber(value, decimals = 0) {
+            if (isNaN(value)) return 'N/D';
+            const roundedValue = Math.round(value); 
+            return roundedValue.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+
+        function formatPercentage(value, decimals = 2) {
+            if (isNaN(value)) return 'N/D';
+            const percentage = value * 100;
+            const factor = Math.pow(10, decimals);
+            const roundedPercentage = Math.round(percentage * factor) / factor;
+            return roundedPercentage.toLocaleString('it-IT', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + '%';
+        }
+        
+        function copyTooltipData() {
+            const tooltipContentEl = document.getElementById('fixedChartTooltipDisplay');
+            const placeholder = tooltipContentEl.querySelector('.placeholder');
+
+            if (placeholder) {
+                // Questo caso non dovrebbe accadere se il pulsante è correttamente disabilitato
+                console.warn("Tentativo di copia quando il tooltip mostra un placeholder.");
+                return; 
+            }
+
+            const labels = tooltipContentEl.querySelectorAll('.label');
+            const values = tooltipContentEl.querySelectorAll('.value');
+
+            if (labels.length === 0 || values.length === 0 || labels.length !== values.length) {
+                console.warn("Dati del tooltip non trovati o in formato non corretto per la copia.");
+                return; 
+            }
+
+            let tableString = "Metrica\tValore\n"; 
+            for (let i = 0; i < labels.length; i++) {
+                const labelText = labels[i].textContent.trim().replace(':', '').trim(); 
+                const valueText = values[i].textContent.trim();
+                tableString += `${labelText}\t${valueText}\n`;
+            }
+
+            navigator.clipboard.writeText(tableString.trim())
+                .then(() => {
+                    const originalText = copyButton.textContent;
+                    copyButton.textContent = 'Copiato!';
+                    copyButton.disabled = true; // Disabilita temporaneamente per feedback
+                    setTimeout(() => {
+                        copyButton.textContent = originalText;
+                        // Ri-abilita solo se il tooltip ha ancora dati validi (il mouse potrebbe essersi spostato)
+                        if (!fixedTooltipDisplayEl.querySelector('.placeholder')) {
+                           copyButton.disabled = false;
+                        }
+                    }, 1500);
+                })
+                .catch(err => {
+                    console.error('Errore durante la copia negli appunti:', err);
+                    alert('Errore durante la copia. Assicurati che la pagina sia servita tramite HTTPS o localhost e che il browser abbia i permessi.');
+                });
+        }
+
+
+        function initializeChart(labels, dataForYAxis, xAxisLabel, yAxisLabel, datasetLabel) {
+            if (forecastChart) { forecastChart.destroy(); }
+             const numericData = dataForYAxis.map(d => {
+                const val = typeof d === 'string' ? safeParseFloat(d) : d;
+                return isNaN(val) ? 0 : Math.round(val);
+            });
+
+            fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
+            if (copyButton) copyButton.disabled = true;
+
+            forecastChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: datasetLabel || 'Dati', data: numericData,
+                        borderColor: '#4285f4', backgroundColor: 'rgba(66, 133, 244, 0.1)',
+                        tension: 0.3, fill: true, pointRadius: numericData.length > 1 ? 3 : 5, pointBackgroundColor: '#fff',
+                        pointBorderColor: '#4285f4', pointHoverRadius: 7, pointHoverBackgroundColor: '#4285f4', pointHoverBorderColor: '#fff',
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false, axis: 'x' },
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            enabled: false,
+                            external: function(context) {
+                                const tooltipModel = context.tooltip;
+                                if (tooltipModel.opacity === 0 || !tooltipModel.dataPoints || tooltipModel.dataPoints.length === 0) {
+                                    return;
+                                }
+                                const activePointIndex = tooltipModel.dataPoints[0].dataIndex;
+                                const pointData = fullChartDataPoints[activePointIndex];
+
+                                if (!pointData) {
+                                    fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
+                                    if (copyButton) copyButton.disabled = true;
+                                    return;
+                                }
+
+                                let innerHtml = `
+                                    <span class="label">Budget:</span><span class="value">${formatCurrency(pointData.budget)}</span>
+                                    <span class="label">Conversioni:</span><span class="value">${formatNumber(pointData.conversions)}</span>
+                                    <span class="label">Costo:</span><span class="value">${formatCurrency(pointData.cost, 'EUR', 2)}</span>
+                                    <span class="label">Clic:</span><span class="value">${formatNumber(pointData.clicks)}</span>
+                                    <span class="label">Impressioni:</span><span class="value">${formatNumber(pointData.impressions)}</span>
+                                    <span class="label">CPA Medio:</span><span class="value">${formatCurrency(pointData.avgCpa, 'EUR', 2)}</span>
+                                    <span class="label">CTR:</span><span class="value">${formatPercentage(pointData.ctr)}</span>
+                                    <span class="label">CPC Medio:</span><span class="value">${formatCurrency(pointData.avgCpc, 'EUR', 2)}</span>
+                                `;
+                                fixedTooltipDisplayEl.innerHTML = innerHtml;
+                                if (copyButton && copyButton.textContent !== 'Copiato!') copyButton.disabled = false;
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: xAxisLabel || 'Asse X' }, grid: { display: false } },
+                        y: {
+                            title: { display: true, text: yAxisLabel || 'Asse Y' }, beginAtZero: true,
+                            ticks: { callback: v => (v >= 1000000 ? (Math.round(v/1000000 * 10)/10).toLocaleString('it-IT')+'M' : (v >= 1000 ? formatNumber(v/1000)+'K' : formatNumber(v))) }
+                        }
+                    },
+                    onHover: (event, chartElement) => {
+                        if (chartElement.length === 0 && forecastChart && forecastChart.tooltip && forecastChart.tooltip.getActiveElements().length === 0) {
+                             fixedTooltipDisplayEl.innerHTML = defaultFixedTooltipContent;
+                             if (copyButton) copyButton.disabled = true;
+                        }
+                    }
+                }
+            });
+        }
+        
+        function displayJsonParseError(message) {
+            jsonParseErrorDiv.textContent = message;
+            console.error(message);
+            initializeChart(
+                ['N/D'], [0],
+                'Budget giornaliero medio (€)', 
+                'Conversioni (Errore)',
+                'Errore Dati'
+            );
+            fixedTooltipDisplayEl.innerHTML = `<span class="placeholder">${message}</span>`;
+            if (copyButton) copyButton.disabled = true;
+        }
+        
+        function loadJsonFromTagToTextarea() {
+            const jsonDataElement = document.getElementById('jsonDataContainer');
+            if (jsonDataElement) {
+                const jsonContent = jsonDataElement.textContent.trim();
+                if (jsonInputElement) {
+                    jsonInputElement.value = jsonContent;
+                }
+            }
+        }
+
+        function updateUIFromPastedJSON() {
+            const jsonString = jsonInputElement.value; 
+            jsonParseErrorDiv.textContent = ''; 
+
+            if (!jsonString) {
+                displayJsonParseError("Per favore, incolla il JSON nell'area di testo o assicurati che sia caricato dal tag script.");
+                return;
+            }
+
+            try {
+                const rawDataObject = JSON.parse(jsonString); 
+
+                if (!rawDataObject || !rawDataObject["2"] || !Array.isArray(rawDataObject["2"]) || rawDataObject["2"].length < 5) {
+                    displayJsonParseError("Il JSON incollato non ha la struttura attesa (proprietà '2' come array con almeno 5 elementi stringa).");
+                    return;
+                }
+                
+                const chartDataString = rawDataObject["2"][4]; 
+                const parsedChartDataContainer = JSON.parse(chartDataString); 
+
+                const IDX_CLICKS = 0;
+                const IDX_COST_MICROS = 1;
+                const IDX_IMPRESSIONS = 2;
+                const IDX_CONVERSIONS = 3;
+                const IDX_AVG_CPA_MICROS = 4;
+
+                fullChartDataPoints = [];
+
+                if (parsedChartDataContainer && parsedChartDataContainer["2"] && Array.isArray(parsedChartDataContainer["2"])) {
+                    parsedChartDataContainer["2"].forEach(point => {
+                        const budgetMicros = safeParseFloat(point["3"]);
+                        const budget = Math.round(budgetMicros / 1000000);
+
+                        let pointMetrics = {
+                            budget: budget,
+                            clicks: 0, cost: 0, impressions: 0, conversions: 0, avgCpa: 0, ctr: 0, avgCpc: 0
+                        };
+
+                        if (point["200"] && point["200"]["1"] && Array.isArray(point["200"]["1"])) {
+                            const p200_1 = point["200"]["1"];
+                            pointMetrics.clicks = Math.round(safeParseFloat(p200_1[IDX_CLICKS]));
+                            const costMicros = safeParseFloat(p200_1[IDX_COST_MICROS]);
+                            pointMetrics.cost = costMicros / 1000000; 
+                            pointMetrics.impressions = Math.round(safeParseFloat(p200_1[IDX_IMPRESSIONS]));
+                            pointMetrics.conversions = Math.round(safeParseFloat(p200_1[IDX_CONVERSIONS]));
+                            const avgCpaMicros = safeParseFloat(p200_1[IDX_AVG_CPA_MICROS]);
+                            pointMetrics.avgCpa = avgCpaMicros / 1000000; 
+
+                            pointMetrics.ctr = (pointMetrics.impressions > 0) ? (pointMetrics.clicks / pointMetrics.impressions) : 0;
+                            pointMetrics.avgCpc = (pointMetrics.clicks > 0 && pointMetrics.cost > 0) ? (pointMetrics.cost / pointMetrics.clicks) : 0;
+                        } else {
+                            console.warn(`Struttura dati p[200][1] inattesa per budget ${budget}:`, point["200"]);
+                        }
+                        fullChartDataPoints.push(pointMetrics);
+                    });
+                } else {
+                     displayJsonParseError("Dati specifici per il grafico (JSON all'indice 4 -> sotto-elemento '2') non trovati o in formato non valido.");
+                     return; // Assicura che copyButton sia gestito se displayJsonParseError lo fa
+                }
+
+                if (fullChartDataPoints.length > 0) {
+                    const uniqueBudgetPoints = [];
+                    const seenBudgets = new Set();
+                    for (const point of fullChartDataPoints) {
+                        const budgetKey = point.budget;
+                        if (!seenBudgets.has(budgetKey)) {
+                            uniqueBudgetPoints.push(point);
+                            seenBudgets.add(budgetKey);
+                        }
+                    }
+                    uniqueBudgetPoints.sort((a, b) => a.budget - b.budget);
+                    fullChartDataPoints = uniqueBudgetPoints;
+
+                    const chartLabels = fullChartDataPoints.map(p => formatCurrency(p.budget));
+                    const chartValuesForYAxis = fullChartDataPoints.map(p => p.conversions);
+
+                    initializeChart(chartLabels, chartValuesForYAxis, 'Budget giornaliero (€)', 'Conversioni', 'Previsione Conversioni');
+                } else {
+                    initializeChart( // Chiamata a initializeChart gestirà copyButton.disabled
+                        [formatCurrency(0)], [0],
+                        'Budget giornaliero (€)',
+                        'Conversioni (Nessun dato valido per il grafico)',
+                        'Previsione Conversioni'
+                    );
+                     fixedTooltipDisplayEl.innerHTML = `<span class="placeholder">Nessun punto dati valido trovato per il grafico.</span>`;
+                     if (copyButton) copyButton.disabled = true; // Doppia sicurezza, ma initializeChart dovrebbe già farlo.
+                }
+
+            } catch (error) {
+                displayJsonParseError("Errore durante l'analisi del JSON: " + error.message + ". Controlla la console per dettagli e assicurati che il JSON incollato sia valido.");
+                console.error("Errore parsing JSON:", error, "Stringa JSON problematica:", jsonString);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (copyButton) copyButton.disabled = true; // Disabilita all'avvio
+            initializeChart( // Questa chiamata imposterà il tooltip e disabiliterà il pulsante
+                [], [],
+                'Budget giornaliero medio (€)', 'Conversioni', 'Previsione Conversioni (Carica i dati)'
+            );
+            loadJsonFromTagToTextarea();
+            updateUIFromPastedJSON(); 
+        });
+    </script>
+</body>
+</html>
